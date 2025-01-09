@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-export default function TabLayout() {
+export default function AppLayout() {
   return (
     <Tabs screenOptions={{
       tabBarActiveTintColor: '#007AFF',
