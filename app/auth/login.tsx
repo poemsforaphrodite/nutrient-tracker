@@ -3,17 +3,35 @@ import { Button, Text } from 'react-native-paper';
 import { router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useEffect } from 'react';
-import * as AuthSession from 'expo-auth-session';
+import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
+
+// Initialize WebBrowser for iOS
+if (Platform.OS !== 'web') {
+  WebBrowser.maybeCompleteAuthSession();
+}
 
 const redirectUri = makeRedirectUri({
   scheme: 'nutrienttracker',
-  path: 'auth/callback',
+  preferLocalhost: true,
 });
 
 export default function LoginScreen() {
   useEffect(() => {
+    const initBrowser = async () => {
+      if (Platform.OS !== 'web') {
+        await WebBrowser.warmUpAsync();
+      }
+    };
+
+    initBrowser();
     checkSession();
+
+    return () => {
+      if (Platform.OS !== 'web') {
+        WebBrowser.coolDownAsync();
+      }
+    };
   }, []);
 
   const checkSession = async () => {
@@ -33,26 +51,48 @@ export default function LoginScreen() {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: Platform.select({
-            web: `${window.location.origin}/auth/callback`,
-            default: redirectUri,
-          }),
+          redirectTo: Platform.OS === 'web' ? window.location.origin : redirectUri,
           skipBrowserRedirect: Platform.OS !== 'web',
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
       });
 
       if (error) throw error;
 
-      if (Platform.OS === 'web' && data?.url) {
-        window.location.href = data.url;
-      } else if (data?.url) {
-        const response = await AuthSession.startAsync({
-          authUrl: data.url,
-          returnUrl: redirectUri,
-        });
+      if (data?.url) {
+        if (Platform.OS === 'web') {
+          window.location.href = data.url;
+          return;
+        }
 
-        if (response?.type === 'success') {
-          router.replace('/(app)');
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          redirectUri,
+          {
+            showInRecents: true,
+            preferEphemeralSession: true,
+          }
+        );
+        
+        if (result.type === 'success') {
+          const { url } = result;
+          if (url) {
+            // Parse the URL parameters
+            const params = new URLSearchParams(url.split('#')[1]);
+            const access_token = params.get('access_token');
+            const refresh_token = params.get('refresh_token');
+            
+            if (access_token && refresh_token) {
+              await supabase.auth.setSession({
+                access_token,
+                refresh_token,
+              });
+              router.replace('/(app)');
+            }
+          }
         }
       }
     } catch (error) {

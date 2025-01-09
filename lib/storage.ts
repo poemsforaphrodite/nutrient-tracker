@@ -1,22 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-class CustomStorage {
-  private getWebStorage() {
-    if (Platform.OS !== 'web') return null;
-    if (typeof window === 'undefined') return null;
-    try {
-      return window.localStorage;
-    } catch {
-      return null;
-    }
-  }
+const isServer = typeof window === 'undefined';
+const isWeb = Platform.OS === 'web';
 
+class CustomStorage {
   async getItem(key: string): Promise<string | null> {
     try {
-      const webStorage = this.getWebStorage();
-      if (webStorage) {
-        return webStorage.getItem(key);
+      if (isWeb) {
+        if (isServer) return null;
+        return window.localStorage.getItem(key);
       }
       return await AsyncStorage.getItem(key);
     } catch (error) {
@@ -27,12 +20,12 @@ class CustomStorage {
 
   async setItem(key: string, value: string): Promise<void> {
     try {
-      const webStorage = this.getWebStorage();
-      if (webStorage) {
-        webStorage.setItem(key, value);
-      } else {
-        await AsyncStorage.setItem(key, value);
+      if (isWeb) {
+        if (isServer) return;
+        window.localStorage.setItem(key, value);
+        return;
       }
+      await AsyncStorage.setItem(key, value);
     } catch (error) {
       console.warn('Error setting item in storage:', error);
     }
@@ -40,12 +33,12 @@ class CustomStorage {
 
   async removeItem(key: string): Promise<void> {
     try {
-      const webStorage = this.getWebStorage();
-      if (webStorage) {
-        webStorage.removeItem(key);
-      } else {
-        await AsyncStorage.removeItem(key);
+      if (isWeb) {
+        if (isServer) return;
+        window.localStorage.removeItem(key);
+        return;
       }
+      await AsyncStorage.removeItem(key);
     } catch (error) {
       console.warn('Error removing item from storage:', error);
     }
